@@ -1,3 +1,5 @@
+#This code is adapted from MATLAB code https://github.com/wangjw18/mixed-traffic
+
 from ring_traffic_model import *
 import cvxpy as cp
 import mosek as msk
