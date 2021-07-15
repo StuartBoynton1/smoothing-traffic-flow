@@ -1,3 +1,5 @@
+#This code is adapted from MATLAB code https://github.com/wangjw18/mixed-traffic
+
 from math import pi
 from math import floor
 from array import *
