@@ -1,3 +1,5 @@
+#This code is adapted from MATLAB code https://github.com/wangjw18/mixed-traffic
+
 from lqr_sdp import *
 import array as arr
 import math
