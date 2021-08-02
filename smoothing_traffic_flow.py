@@ -1,21 +1,36 @@
-#This code is adapted from MATLAB code https://github.com/wangjw18/mixed-traffic
+##This code is adapted from MATLAB code https://github.com/wangjw18/mixed-traffic
 
 from lqr_sdp import *
 import array as arr
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import numpy.ma as M
 from mpl_toolkits import mplot3d
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import CSS4_COLORS
 
+np.random.seed(156379)
 
 #run this command before running mosek
 #python <MSKHome>/mosek/9.2/tools/platform/osx64x86/bin/install.py
 
+#Scenario 1 is sharp braking at 20 seconds
+#Scenario 2 is random distribution of vehicles and uniform distribution of initial velocity
+#Scenario 3 is Experiment B of "Controllability Analysis and Optimal Control of Mixed Traffic Flow with Human-driven and Autonomous Vehicles"
+scenario = 3
+
+#If spacing_or_velocity == 0 then display spacing graph, if 1 then display velocity graph, if 2 then display position color graph
+spacing_or_velocity = 2
+
 
 # Mix or not
 mix = 1
+
 # 1.Optimal Control  2.FollowerStopper  3.PI with Saturation
 controllerType = 1
+
 
 brakeID = 6 - 1
 # In the simulation, the ID of the AV is 20, and thus the brakeID needs to minus one    
@@ -27,12 +42,16 @@ N = 20
 #If circumference is chosen then you may ignore value of spacing and same for spacing
 circumference_or_spacing = 0
 circumference = 400
-s_star = 20
+s_star = 20    #19.36 for 14m/s v*   #20.63 for 16m/s v*   #20 for 15m/s v*      #for Experiment 7 from scenario 2 set just s_ctr to these values
 
+if circumference_or_spacing:
+    circumference = s_star*N
+elif circumference_or_spacing == 0:
+    s_star = circumference/N
 
 
 if mix == 1 and controllerType == 1:
-    gammaType = 2
+    gammaType = 1
     if gammaType == 1:
         gamma_s = 0.03
         gamma_v = 0.15
@@ -41,10 +60,11 @@ if mix == 1 and controllerType == 1:
         gamma_s = 3
         gamma_v = 15
         gamma_u = 1
+        
     
-    #K = np.array( [[3.05214216883394, 2.04047486745414, 4.23441918486731, 0.816748753025211, 4.27938838608577, -0.0841721905231217, 3.58825708391328, -0.622013145554968, 2.55870322570934, -0.831571241306728, 1.51118202880832, -0.799391067556516, 0.648096599208884, -0.632100576735584, 0.0499895764298799, -0.426406463994733, -0.298173114761084, -0.249029740041272, -0.465166658625890, -0.130429139967252, -0.532302845404502, -0.0708478026818128, -0.564848465218233, -0.0532302254917162, -0.600421176828263, -0.0564142781996425, -0.651376872199535, -0.0638967241144484, -0.714263700496758, -0.0670317867827030, -0.779984326687099, -0.0648390708889171, -0.842126285544850, -0.0638888616892629, -0.905090752213027, -0.0796764272045653, -0.993965118029564, -0.131210521554255, -1.31725756289723, 5.23568807061450]])
     K = lqr_sdp(N,s_star,gamma_s,gamma_v,gamma_u,1)
-    print(K)
+    
+    #K1 = np.array( [[0.395398638473353, 0.121294783032293, 0.417338674241364, 0.0148374038356790, 0.372106495474327, -0.0647850171206889, 0.285279461640585, -0.109741329877132, 0.183960286830143, -0.121632247425548, 0.0902491529980125, -0.108977377900313, 0.0174772896793911, -0.0833003901639644, -0.0303065310092734, -0.0552939602935581, -0.0562213652242463, -0.0322391690525524, -0.0671269735091755, -0.0171916990695595, -0.0703109632991072, -0.00971899900662415, -0.0712931705515985, -0.00748227969194595, -0.0730760144740543, -0.00784843813891530, -0.0765576635371872, -0.00895277568554023, -0.0815032047914883, -0.0100245429163172, -0.0874794729270434, -0.0111184287860157, -0.0943795333512298, -0.0125332748093950, -0.102415196907486, -0.0141468211948435, -0.111608662556364, -0.0147686951380971, -0.131229687586483, 1.19230263066513]])
     
 alpha_k = 0.6
     
@@ -57,8 +77,11 @@ beta = 0.9
 s_st = 5
 s_go = 35
 
+if (scenario==1) or (scenario==2):
+    TotalTime=100
+elif (scenario==3):
+    TotalTime = 700
 
-TotalTime = 100
 Tstep = 0.01
 NumStep = int(TotalTime/Tstep)
 
@@ -68,16 +91,18 @@ if mix:
 else:
     ActuationTime = 9999
 
+ActuationTimeEnd = math.inf
+if (scenario==3):
+    ActuationTime = 300
+    ActuationTimeEnd = math.inf             #Change to 450 for experiment B of Controllability Analysis
 
 
-if circumference_or_spacing:
-    circumference = s_star*N
-elif circumference_or_spacing == 0:
-    s_star = circumference/N
+
+
 
 v_star  = (v_max/2) * (1-math.cos(math.pi * (s_star - s_st)/(s_go - s_st)))
 s_ctr  = s_star
-v_ctr  = (v_max/2) * (1-math.cos(math.pi * (s_ctr - s_st)/(s_go - s_st)))              #What is s_ctr and v_ctr
+v_ctr  = (v_max/2) * (1-math.cos(math.pi * (s_ctr - s_st)/(s_go - s_st)))
 
 
 sd = 0 # Collision avoidance safe distance
@@ -85,21 +110,27 @@ sd = 0 # Collision avoidance safe distance
 S = np.zeros((NumStep,N,3))
 
 #Initial state for each vehicle
-dev_s = 0
-dev_v = 0
-co_v = 1.0
+if (scenario == 1) or (scenario==3): 
+    dev_s = 0
+    dev_v = 0
+    co_v = 1.0
+elif scenario == 2:      #Not necessary unless new random numbers needed
+    dev_s = 7.5
+    dev_v = 4
+    co_v = 1.0    
+    
 v_ini = co_v * v_star                                                                 # What is co_v ?????
 
+                          
 var1 = np.linspace(circumference, s_star, N)
-var2 = np.random.rand(N)*2*dev_s-dev_s
-
+var2 = np.random.rand(N)*2*dev_s-dev_s    
 S[0, :, 0] = var1 + var2
-
-#print(S[0,:,0])
-
+    
 var1 = v_ini*np.ones([N])
-var2 = (np.random.rand(N)*2*dev_v-dev_v)
+var2 = (np.random.rand(N)*2*dev_v-dev_v)    
 S[0, :, 1] =  var1 + var2
+
+
 
 ID = np.zeros([N])
 
@@ -134,27 +165,33 @@ sd_actuate = 0
 
 for k in range(0,NumStep-2):
     
-    #Update Acceleration
+    #Car in front velocity
     temp[1:] = S[k,:-1,1]
     temp[0] = S[k,-1,1]
-
-    
     V_diff[k,:] = temp-S[k,:,1]
+    
+    
     temp[0]=S[k,-1,0]+circumference
     temp[1:] = S[k,:-1,0]
-    #print(temp)
+
     D_diff[k,:] = temp-S[k,:,0]
-    #print(D_diff)
+
     cal_D = D_diff[k,:]
     cal_D[cal_D>s_go] = s_go
     cal_D[cal_D<s_st] = s_st
+
     
     
     #OVM Model
     
     acel2 = math.pi*(cal_D-s_st)/(s_go-s_st)
     acel1 = (1-np.cos(acel2))
-    acel = alpha*(v_max/2*acel1-S[k,:,1])+beta*V_diff[k,:]
+    acel3 = np.zeros(N)
+    
+    if (scenario==3): 
+        acel3 = np.random.normal(0,math.sqrt(0.5),N)
+   
+    acel = alpha*(v_max/2*acel1-S[k,:,1])+beta*V_diff[k,:] + acel3
     acel[acel>acel_max] = acel_max
     acel[acel<dcel_max] = dcel_max
     
@@ -164,27 +201,27 @@ for k in range(0,NumStep-2):
     acel_sd = (S[k,:,1]**2-temp**2)/2/D_diff[k,:]
     acel[acel_sd>abs(dcel_max)] = dcel_max
     
-    S[k,:,2] = acel;
+    S[k,:,2] = acel
     
     
     
-    if (k*Tstep>20) and (k*Tstep<22):
-        S[k,brakeID,2]=-5
+    if (k*Tstep>20) and (k*Tstep<23) and (scenario == 1):
+        S[k,brakeID,2]=-3
         
     
-    if k>=ActuationTime/Tstep:
+    if (k>=ActuationTime/Tstep) and (k<ActuationTimeEnd/Tstep) and (mix==1):
         
         if controllerType==1:
             X[np.arange(0,2*N,2),k] = D_diff[k,:]-s_ctr
             X[np.arange(1,2*N,2),k] = S[k,:,1]-v_ctr
-            u = np.matmul(-K,X[:,k])
+            u = -K@X[:,k]
             
         elif controllerType==2:
             dx10 = 9.5
             dx20 = 10.75
             dx30 = 11
             
-            dv_temp = min(S[k,N-2,1]-S[k,N-1,1],0)
+            dv_temp = min(S[k,-2,1]-S[k,-1,1],0)
             
             d1 = 1.5
             d2 = 1.0
@@ -195,19 +232,19 @@ for k in range(0,NumStep-2):
             dx3 = dx30+dv_temp**2/2/d3
             
             dx = D_diff[k,N-1]
-            v_temp = min(S[k,N-2,1],12)
+            v_temp = min(S[k,-2,1],12)
             
             
-            if dx<=1:
+            if dx<=dx1:
                 v_cmd = 0
-            elif dx<=d2:
+            elif dx<=dx2:                                                        #??????? d2 is greater than d3
                 v_cmd = v_temp*(dx-dx1)/(dx2-dx1)
-            elif dx<=d3:
+            elif dx<=dx3:
                 v_cmd = v_temp+(v_ctr-v_temp)*(dx-dx2)/(dx3-dx2)
             else:
                 v_cmd = v_ctr
             
-            u = alpha_k*(v_cmd-S[k,N-1,1])
+            u = alpha_k*(v_cmd-S[k,-1,1])
             
         elif controllerType==3:
             gl = 7
@@ -215,10 +252,10 @@ for k in range(0,NumStep-2):
             v_catch = 1
             gamma_temp = 2
             
-            if k-26/Tstep<=0:
-                v_hisAvg = np.mean(S[:k+1,-1,1])
+            if k-38/Tstep<=ActuationTime/Tstep:
+                v_hisAvg = np.mean(S[int(ActuationTime/Tstep)-1:k,-1,1])
             else:
-                v_hisAvg = np.mean(S[int(k-26/Tstep):k+1,-1,1])
+                v_hisAvg = np.mean(S[int((k-38/Tstep)-ActuationTime/Tstep)-1:k,-1,1])
             
             v_target = v_hisAvg + v_catch*min(max((D_diff[k,-1]-gl)/(gu-gl),0),1)
             alpha_temp = min(max((D_diff[k,-1]-max(2*V_diff[k,-1],4))/gamma_temp, 0),1)
@@ -236,6 +273,7 @@ for k in range(0,NumStep-2):
         if (S[k,N-1,1]**2-S[k,N-2,1]**2)/2/(S[k,N-2,0]-S[k,N-1,0]-sd)>abs(dcel_max):
             u=dcel_max
             
+        
         S[k,-1,2] = u
  
         
@@ -243,37 +281,131 @@ for k in range(0,NumStep-2):
     S[k+1,:,0] = S[k,:,0] + Tstep*S[k,:,1]
     
 
-x = np.zeros(NumStep)
+#x = np.zeros(NumStep)
 
 for k in range(NumStep):
     V_avg[k] = np.mean(S[k,:,1])
-    x[k] = k
-    #print(V_avg[k])
+    #x[k] = k
+    
+        
+        
+#Settling Time
+final_velocity = V_avg[NumStep-2]
+above_2_percent = final_velocity*1.03
+below_2_percent = final_velocity*0.97
 
-       
-       
+settling_time = 0
+for k in range(NumStep-2,0,-1):
+    for j in range(N):
+        if (S[k,j,1] > above_2_percent) or (S[k,j,1] < below_2_percent):
+            settling_time = k/100
+            break
+    if (settling_time != 0):
+        break
+    
+print("Settling Time within 3% is",settling_time, "s")
+
+
+
+#Maximum Spacing in fron of AV
+max_space = 0
+for k in range(NumStep):
+    curr_space = S[k,-2,0]-S[k,-1,0]
+    if ( curr_space > max_space):
+        max_space = curr_space
+        
+print("Maximum Spacing in front of AV is ", round(max_space,2) )
+
+#Average settled velocity
+print("Average settled velocity is ", round(np.mean(S[(int((0.9*TotalTime)/Tstep)):,:,1]),2), " m/s")
+ 
+
+
+
 #Display data
 
 fig = plt.figure()
+x = np.arange(0,NumStep)
 
 # syntax for 3-D projection
-ax = plt.axes(projection ='3d')
+
 
 #y = np.linspace(0,20,20)
 
-for i in range(20):
-    z = np.ones(NumStep-1)*i
+if spacing_or_velocity==0:
+    ax = plt.axes(projection ='3d')
+    for i in range(N):
+        z = np.ones(NumStep-1)*i
+        
+        if i==N-1 and mix==1:
+            ax.plot3D(z, x[:-1], S[:-1,i-1,0] - S[:-1,i,0], 'red', linewidth=0.5)
+            continue
+
+        if i==0:
+            ax.plot3D(z, x[:-1], S[:-1,i-1,0] - S[:-1,i,0] + circumference, 'blue', linewidth=0.5)
+            continue  
+        
+        ax.plot3D(z, x[:-1], S[:-1,i-1,0] - S[:-1,i,0], 'blue', linewidth=0.5)
+             
     
-    if i==19 and mix==1:
-        ax.plot3D(z, x[:-1], S[:-1,19,1], 'red', linewidth=0.5)
-        continue
-    elif i==19 and mix==0:
+    ax.set_yticks(np.linspace(0,NumStep,5))
+    ax.set_yticklabels(np.linspace(0,TotalTime,5))
+    ax.set_xlabel("Vehicle ID")
+    ax.set_ylabel("Time")
+    ax.set_zlabel("Spacing from vehicle ahead")
+    title = "N=" + str(N) + ", mix=" + str(mix) +", controller=" + str(controllerType)
+    ax.set_title(title)
+    plt.show()
+    
+if spacing_or_velocity==1:
+    ax = plt.axes(projection ='3d')
+    for i in range(N):
+        z = np.ones(NumStep-1)*i
+        
+        if i==N-1 and mix==1:
+            ax.plot3D(z, x[:-1], S[:-1,i,1], 'red', linewidth=0.5)
+            continue
+        
         ax.plot3D(z, x[:-1], S[:-1,i,1], 'blue', linewidth=0.5)
-        continue
+             
     
-    ax.plot3D(z, x[:-1], S[:-1,i,1], 'blue', linewidth=0.5)
-         
-#plt.plot(V_avg[:-2])
-#plt.xlabel("Time")
-#plt.ylabel("Average velocity of cars")
-plt.show()
+    ax.set_yticks(np.linspace(0,NumStep,5))
+    ax.set_yticklabels(np.linspace(0,TotalTime,5))
+    ax.set_xlabel("Vehicle ID")
+    ax.set_ylabel("Time")
+    ax.set_zlabel("Vehicle Velocity")
+    title = "N=" + str(N) + ", mix=" + str(mix) +", controller=" + str(controllerType)
+    ax.set_title(title)
+    plt.show()    
+        
+        
+        
+if spacing_or_velocity==2:
+    
+    for i in range(N):
+        y = S[:,i,0]%circumference
+        y[y>399]=np.nan
+        
+        
+        #y = M.array(y)
+        #masked_y = M.masked_where(y>399,y)
+        z = S[:,i,1]
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)   
+        
+        
+        lc = LineCollection(segments, array=z, cmap=LinearSegmentedColormap.from_list('rg',["black","r", "orange", "y", "limegreen"], N=256), norm=plt.Normalize(0,25), linewidth=0.5)#, alpha=alpha)
+            
+        ax = plt.gca()
+        ax.add_collection(lc)
+        
+        #colorline(x, S[:,i,0]%circumference, S[:,i,1])
+        #plt.scatter(x=x, y=S[:,i,0]%circumference, c=S[:,i,1], s=0.00001, cmap=LinearSegmentedColormap.from_list('rg',["b","r","y","g"], N=256), norm=plt.Normalize(0,15))
+        #plt.plot(x, S[:,i,0]%circumference, c=S[:,i,1])
+        
+    plt.xlim(20000, 60000)
+    plt.ylim(0,400)
+    plt.show()
+    
+
+        
